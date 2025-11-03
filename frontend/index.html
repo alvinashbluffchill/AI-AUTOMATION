@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Social Media Automation Platform</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-hover {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        .upload-area {
+            border: 2px dashed #cbd5e0;
+            transition: all 0.3s ease;
+        }
+        .upload-area.dragover {
+            border-color: #667eea;
+            background-color: #f7fafc;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // API Base URL
+        const API_BASE = 'http://localhost:8000/api';
+
+        // Main App Component
+        function App() {
+            const [currentView, setCurrentView] = useState('dashboard');
+            const [posts, setPosts] = useState([]);
+            const [analytics, setAnalytics] = useState({});
+            const [loading, setLoading] = useState(false);
+
+            useEffect(() => {
+                fetchPosts();
+                fetchAnalytics();
+            }, []);
+
+            const fetchPosts = async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/upload/posts`);
+                    const data = await response.json();
+                    setPosts(data.posts || []);
+                } catch (error) {
+                    console.error('Error fetching posts:', error);
+                }
+            };
+
+            const fetchAnalytics = async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/analytics/overview`);
+                    const data = await response.json();
+                    setAnalytics(data.overview || {});
+                } catch (error) {
+                    console.error('Error fetching analytics:', error);
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-50">
+                    <Navbar currentView={currentView} setCurrentView={setCurrentView} />
+                    <div className="flex">
+                        <Sidebar currentView={currentView} setCurrentView={setCurrentView} />
+                        <main className="flex-1 p-6">
+                            {currentView === 'dashboard' && <Dashboard analytics={analytics} posts={posts} />}
+                            {currentView === 'upload' && <Upload onUploadSuccess={fetchPosts} />}
+                            {currentView === 'schedule' && <Schedule posts={posts} />}
+                            {currentView === 'analytics' && <Analytics analytics={analytics} />}
+                            {currentView === 'posts' && <PostManager posts={posts} onUpdate={fetchPosts} />}
+                        </main>
+                    </div>
+                </div>
+            );
+        }
+
+        // Navigation Bar Component
+        function Navbar({ currentView, setCurrentView }) {
+            return (
+                <nav className="gradient-bg text-white shadow-lg">
+                    <div className="max-w-7xl mx-auto px-4">
+                        <div className="flex justify-between items-center py-4">
+                            <div className="flex items-center space-x-4">
+                                <i className="fas fa-share-alt text-2xl"></i>
+                                <h1 className="text-xl font-bold">Social Media Automation</h1>
+                            </div>
+                            <div className="flex items-center space-x-4">
+                                <button className="hover:bg-white hover:bg-opacity-20 px-3 py-2 rounded">
+                                    <i className="fas fa-bell"></i>
+                                </button>
+                                <button className="hover:bg-white hover:bg-opacity-20 px-3 py-2 rounded">
+                                    <i className="fas fa-user-circle"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+            );
+        }
+
+        // Sidebar Component
+        function Sidebar({ currentView, setCurrentView }) {
+            const menuItems = [
+                { id: 'dashboard', icon: 'fas fa-tachometer-alt', label: 'Dashboard' },
+                { id: 'upload', icon: 'fas fa-cloud-upload-alt', label: 'Upload Content' },
+                { id: 'schedule', icon: 'fas fa-calendar-alt', label: 'Schedule Posts' },
+                { id: 'posts', icon: 'fas fa-images', label: 'Manage Posts' },
+                { id: 'analytics', icon: 'fas fa-chart-line', label: 'Analytics' },
+            ];
+
+            return (
+                <aside className="w-64 bg-white shadow-lg">
+                    <div className="p-6">
+                        <nav className="space-y-2">
+                            {menuItems.map(item => (
+                                <button
+                                    key={item.id}
+                                    onClick={() => setCurrentView(item.id)}
+                                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                                        currentView === item.id
+                                            ? 'bg-blue-50 text-blue-600 border-r-2 border-blue-600'
+                                            : 'text-gray-600 hover:bg-gray-50'
+                                    }`}
+                                >
+                                    <i className={item.icon}></i>
+                                    <span>{item.label}</span>
+                                </button>
+                            ))}
+                        </nav>
+                    </div>
+                </aside>
+            );
+        }
+
+        // Dashboard Component
+        function Dashboard({ analytics, posts }) {
+            const totalPosts = posts.length;
+            const scheduledPosts = posts.filter(p => p.status === 'scheduled').length;
+            const publishedPosts = posts.filter(p => p.status === 'posted').length;
+
+            const platforms = Object.keys(analytics);
+            const totalFollowers = platforms.reduce((sum, platform) => 
+                sum + (analytics[platform]?.followers_count || 0), 0
+            );
+
+            return (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-3xl font-bold text-gray-900">Dashboard</h2>
+                        <div className="text-sm text-gray-500">
+                            Last updated: {new Date().toLocaleString()}
+                        </div>
+                    </div>
+
+                    {/* Stats Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <StatCard
+                            title="Total Posts"
+                            value={totalPosts}
+                            icon="fas fa-images"
+                            color="blue"
+                        />
+                        <StatCard
+                            title="Scheduled"
+                            value={scheduledPosts}
+                            icon="fas fa-clock"
+                            color="yellow"
+                        />
+                        <StatCard
+                            title="Published"
+                            value={publishedPosts}
+                            icon="fas fa-check-circle"
+                            color="green"
+                        />
+                        <StatCard
+                            title="Total Followers"
+                            value={totalFollowers.toLocaleString()}
+                            icon="fas fa-users"
+                            color="purple"
+                        />
+                    </div>
+
+                    {/* Platform Overview */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="bg-white rounded-lg shadow-md p-6">
+                            <h3 className="text-lg font-semibold mb-4">Platform Overview</h3>
+                            <div className="space-y-4">
+                                {platforms.map(platform => (
+                                    <PlatformCard
+                                        key={platform}
+                                        platform={platform}
+                                        data={analytics[platform]}
+                                    />
+                                ))}
+                                {platforms.length === 0 && (
+                                    <p className="text-gray-500 text-center py-8">
+                                        No social media accounts connected yet.
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-lg shadow-md p-6">
+                            <h3 className="text-lg font-semibold mb-4">Recent Posts</h3>
+                            <div className="space-y-3">
+                                {posts.slice(0, 5).map(post => (
+                                    <div key={post.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                                        <div className="w-12 h-12 bg-gray-200 rounded-lg flex items-center justify-center">
+                                            <i className={`fas ${post.file_type === 'video' ? 'fa-video' : 'fa-image'} text-gray-500`}></i>
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="font-medium text-sm">{post.title}</p>
+                                            <p className="text-xs text-gray-500">
+                                                {post.status} • {new Date(post.created_at).toLocaleDateString()}
+                                            </p>
+                                        </div>
+                                        <StatusBadge status={post.status} />
+                                    </div>
+                                ))}
+                                {posts.length === 0 && (
+                                    <p className="text-gray-500 text-center py-8">
+                                        No posts uploaded yet.
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Upload Component
+        function Upload({ onUploadSuccess }) {
+            const [files, setFiles] = useState([]);
+            const [uploading, setUploading] = useState(false);
+            const [dragOver, setDragOver] = useState(false);
+            const fileInputRef = useRef();
+
+            const handleDrop = (e) => {
+                e.preventDefault();
+                setDragOver(false);
+                const droppedFiles = Array.from(e.dataTransfer.files);
+                setFiles(prev => [...prev, ...droppedFiles]);
+            };
+
+            const handleFileSelect = (e) => {
+                const selectedFiles = Array.from(e.target.files);
+                setFiles(prev => [...prev, ...selectedFiles]);
+            };
+
+            const removeFile = (index) => {
+                setFiles(prev => prev.filter((_, i) => i !== index));
+            };
+
+            const uploadFiles = async () => {
+                if (files.length === 0) return;
+
+                setUploading(true);
+                try {
+                    for (const file of files) {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        formData.append('title', file.name.split('.')[0]);
+                        formData.append('description', `Uploaded ${file.name}`);
+                        formData.append('platforms', JSON.stringify(['instagram', 'facebook']));
+
+                        await fetch(`${API_BASE}/upload/file`, {
+                            method: 'POST',
+                            body: formData
+                        });
+                    }
+                    
+                    setFiles([]);
+                    onUploadSuccess();
+                    alert('Files uploaded successfully!');
+                } catch (error) {
+                    console.error('Upload error:', error);
+                    alert('Upload failed. Please try again.');
+                } finally {
+                    setUploading(false);
+                }
+            };
+
+            return (
+                <div className="space-y-6">
+                    <h2 className="text-3xl font-bold text-gray-900">Upload Content</h2>
+
+                    {/* Upload Area */}
+                    <div
+                        className={`upload-area p-8 rounded-lg text-center ${dragOver ? 'dragover' : ''}`}
+                        onDrop={handleDrop}
+                        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                        onDragLeave={() => setDragOver(false)}
+                    >
+                        <i className="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-4"></i>
+                        <p className="text-lg text-gray-600 mb-2">
+                            Drag and drop your files here, or{' '}
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="text-blue-600 hover:text-blue-800 underline"
+                            >
+                                browse
+                            </button>
+                        </p>
+                        <p className="text-sm text-gray-500">
+                            Supports images (JPG, PNG, GIF) and videos (MP4, MOV, AVI)
+                        </p>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            multiple
+                            accept="image/*,video/*"
+                            onChange={handleFileSelect}
+                            className="hidden"
+                        />
+                    </div>
+
+                    {/* File List */}
+                    {files.length > 0 && (
+                        <div className="bg-white rounded-lg shadow-md p-6">
+                            <h3 className="text-lg font-semibold mb-4">Selected Files ({files.length})</h3>
+                            <div className="space-y-3">
+                                {files.map((file, index) => (
+                                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                        <div className="flex items-center space-x-3">
+                                            <i className={`fas ${file.type.startsWith('video/') ? 'fa-video' : 'fa-image'} text-gray-500`}></i>
+                                            <div>
+                                                <p className="font-medium">{file.name}</p>
+                                                <p className="text-sm text-gray-500">
+                                                    {(file.size / 1024 / 1024).toFixed(2)} MB
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => removeFile(index)}
+                                            className="text-red-500 hover:text-red-700"
+                                        >
+                                            <i className="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                            
+                            <div className="mt-6 flex justify-end">
+                                <button
+                                    onClick={uploadFiles}
+                                    disabled={uploading}
+                                    className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                                >
+                                    {uploading ? (
+                                        <>
+                                            <i className="fas fa-spinner fa-spin mr-2"></i>
+                                            Uploading...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="fas fa-upload mr-2"></i>
+                                            Upload Files
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // Schedule Component
+        function Schedule({ posts }) {
+            const [selectedPosts, setSelectedPosts] = useState([]);
+            const [scheduleTime, setScheduleTime] = useState('');
+            const [platforms, setPlatforms] = useState([]);
+
+            const availablePosts = posts.filter(p => p.status === 'uploaded' || p.status === 'processed');
+            const platformOptions = [
+                { id: 'instagram', name: 'Instagram', icon: 'fab fa-instagram' },
+                { id: 'facebook', name: 'Facebook', icon: 'fab fa-facebook' },
+                { id: 'twitter', name: 'Twitter', icon: 'fab fa-twitter' },
+                { id: 'youtube', name: 'YouTube', icon: 'fab fa-youtube' },
+                { id: 'tiktok', name: 'TikTok', icon: 'fab fa-tiktok' }
+            ];
+
+            const schedulePost = async () => {
+                if (selectedPosts.length === 0 || !scheduleTime || platforms.length === 0) {
+                    alert('Please select posts, schedule time, and platforms');
+                    return;
+                }
+
+                try {
+                    for (const postId of selectedPosts) {
+                        await fetch(`${API_BASE}/schedule/post`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                post_id: postId,
+                                platform_ids: platforms,
+                                scheduled_time: scheduleTime
+                            })
+                        });
+                    }
+                    
+                    alert('Posts scheduled successfully!');
+                    setSelectedPosts([]);
+                    setScheduleTime('');
+                    setPlatforms([]);
+                } catch (error) {
+                    console.error('Scheduling error:', error);
+                    alert('Scheduling failed. Please try again.');
+                }
+            };
+
+            return (
+                <div className="space-y-6">
+                    <h2 className="text-3xl font-bold text-gray-900">Schedule Posts</h2>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Post Selection */}
+                        <div className="bg-white rounded-lg shadow-md p-6">
+                            <h3 className="text-lg font-semibold mb-4">Select Posts</h3>
+                            <div className="space-y-3 max-h-96 overflow-y-auto">
+                                {availablePosts.map(post => (
+                                    <label key={post.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedPosts.includes(post.id)}
+                                            onChange={(e) => {
+                                                if (e.target.checked) {
+                                                    setSelectedPosts(prev => [...prev, post.id]);
+                                                } else {
+                                                    setSelectedPosts(prev => prev.filter(id => id !== post.id));
+                                                }
+                                            }}
+                                            className="rounded"
+                                        />
+                                        <div className="w-12 h-12 bg-gray-200 rounded-lg flex items-center justify-center">
+                                            <i className={`fas ${post.file_type === 'video' ? 'fa-video' : 'fa-image'} text-gray-500`}></i>
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="font-medium">{post.title}</p>
+                                            <p className="text-sm text-gray-500">{post.file_type}</p>
+                                        </div>
+                                    </label>
+                                ))}
+                                {availablePosts.length === 0 && (
+                                    <p className="text-gray-500 text-center py-8">
+                                        No posts available for scheduling.
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Scheduling Options */}
+                        <div className="bg-white rounded-lg shadow-md p-6">
+                            <h3 className="text-lg font-semibold mb-4">Scheduling Options</h3>
+                            
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Schedule Time
+                                    </label>
+                                    <input
+                                        type="datetime-local"
+                                        value={scheduleTime}
+                                        onChange={(e) => setScheduleTime(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Select Platforms
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {platformOptions.map(platform => (
+                                            <label key={platform.id} className="flex items-center space-x-2 p-2 border rounded-lg cursor-pointer hover:bg-gray-50">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={platforms.includes(platform.id)}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) {
+                                                            setPlatforms(prev => [...prev, platform.id]);
+                                                        } else {
+                                                            setPlatforms(prev => prev.filter(id => id !== platform.id));
+                                                        }
+                                                    }}
+                                                    className="rounded"
+                                                />
+                                                <i className={`${platform.icon} text-lg`}></i>
+                                                <span className="text-sm">{platform.name}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={schedulePost}
+                                    className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+                                >
+                                    <i className="fas fa-calendar-plus mr-2"></i>
+                                    Schedule Posts
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Analytics Component
+        function Analytics({ analytics }) {
+            const platforms = Object.keys(analytics);
+
+            return (
+                <div className="space-y-6">
+                    <h2 className="text-3xl font-bold text-gray-900">Analytics</h2>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                        {platforms.map(platform => (
+                            <div key={platform} className="bg-white rounded-lg shadow-md p-6">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-lg font-semibold capitalize">{platform}</h3>
+                                    <i className={`fab fa-${platform} text-2xl text-gray-400`}></i>
+                                </div>
+                                
+                                <div className="space-y-3">
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-600">Followers</span>
+                                        <span className="font-semibold">
+                                            {analytics[platform]?.followers_count?.toLocaleString() || 0}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-600">Posts</span>
+                                        <span className="font-semibold">
+                                            {analytics[platform]?.posts_count || 0}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-600">Growth</span>
+                                        <span className={`font-semibold ${
+                                            (analytics[platform]?.followers_growth || 0) >= 0 
+                                                ? 'text-green-600' 
+                                                : 'text-red-600'
+                                        }`}>
+                                            {analytics[platform]?.followers_growth >= 0 ? '+' : ''}
+                                            {analytics[platform]?.followers_growth || 0}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                        
+                        {platforms.length === 0 && (
+                            <div className="col-span-full text-center py-12">
+                                <i className="fas fa-chart-line text-4xl text-gray-300 mb-4"></i>
+                                <p className="text-gray-500">No analytics data available yet.</p>
+                                <p className="text-sm text-gray-400">Connect your social media accounts to see analytics.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        // Post Manager Component
+        function PostManager({ posts, onUpdate }) {
+            const [filter, setFilter] = useState('all');
+
+            const filteredPosts = posts.filter(post => {
+                if (filter === 'all') return true;
+                return post.status === filter;
+            });
+
+            const deletePost = async (postId) => {
+                if (!confirm('Are you sure you want to delete this post?')) return;
+
+                try {
+                    await fetch(`${API_BASE}/upload/posts/${postId}`, {
+                        method: 'DELETE'
+                    });
+                    onUpdate();
+                } catch (error) {
+                    console.error('Delete error:', error);
+                    alert('Failed to delete post.');
+                }
+            };
+
+            return (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-3xl font-bold text-gray-900">Manage Posts</h2>
+                        <select
+                            value={filter}
+                            onChange={(e) => setFilter(e.target.value)}
+                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        >
+                            <option value="all">All Posts</option>
+                            <option value="uploaded">Uploaded</option>
+                            <option value="scheduled">Scheduled</option>
+                            <option value="posted">Posted</option>
+                            <option value="failed">Failed</option>
+                        </select>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {filteredPosts.map(post => (
+                            <div key={post.id} className="bg-white rounded-lg shadow-md overflow-hidden card-hover">
+                                <div className="aspect-w-16 aspect-h-9 bg-gray-200">
+                                    {post.thumbnail_path ? (
+                                        <img
+                                            src={`/uploads/${post.thumbnail_path}`}
+                                            alt={post.title}
+                                            className="w-full h-48 object-cover"
+                                        />
+                                    ) : (
+                                        <div className="w-full h-48 flex items-center justify-center">
+                                            <i className={`fas ${post.file_type === 'video' ? 'fa-video' : 'fa-image'} text-4xl text-gray-400`}></i>
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                <div className="p-4">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <h3 className="font-semibold text-lg truncate">{post.title}</h3>
+                                        <StatusBadge status={post.status} />
+                                    </div>
+                                    
+                                    <p className="text-gray-600 text-sm mb-3 line-clamp-2">
+                                        {post.description || 'No description'}
+                                    </p>
+                                    
+                                    <div className="flex justify-between items-center text-sm text-gray-500 mb-3">
+                                        <span>{post.file_type}</span>
+                                        <span>{new Date(post.created_at).toLocaleDateString()}</span>
+                                    </div>
+                                    
+                                    {post.scheduled_time && (
+                                        <p className="text-sm text-blue-600 mb-3">
+                                            <i className="fas fa-clock mr-1"></i>
+                                            Scheduled: {new Date(post.scheduled_time).toLocaleString()}
+                                        </p>
+                                    )}
+                                    
+                                    <div className="flex justify-end space-x-2">
+                                        <button
+                                            onClick={() => deletePost(post.id)}
+                                            className="text-red-500 hover:text-red-700 px-2 py-1"
+                                        >
+                                            <i className="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                        
+                        {filteredPosts.length === 0 && (
+                            <div className="col-span-full text-center py-12">
+                                <i className="fas fa-images text-4xl text-gray-300 mb-4"></i>
+                                <p className="text-gray-500">No posts found.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        // Utility Components
+        function StatCard({ title, value, icon, color }) {
+            const colorClasses = {
+                blue: 'bg-blue-500',
+                green: 'bg-green-500',
+                yellow: 'bg-yellow-500',
+                purple: 'bg-purple-500',
+                red: 'bg-red-500'
+            };
+
+            return (
+                <div className="bg-white rounded-lg shadow-md p-6 card-hover">
+                    <div className="flex items-center">
+                        <div className={`${colorClasses[color]} p-3 rounded-lg`}>
+                            <i className={`${icon} text-white text-xl`}></i>
+                        </div>
+                        <div className="ml-4">
+                            <p className="text-sm font-medium text-gray-600">{title}</p>
+                            <p className="text-2xl font-bold text-gray-900">{value}</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function PlatformCard({ platform, data }) {
+            const platformIcons = {
+                instagram: 'fab fa-instagram',
+                facebook: 'fab fa-facebook',
+                twitter: 'fab fa-twitter',
+                youtube: 'fab fa-youtube',
+                tiktok: 'fab fa-tiktok'
+            };
+
+            return (
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center space-x-3">
+                        <i className={`${platformIcons[platform]} text-xl text-gray-600`}></i>
+                        <div>
+                            <p className="font-medium capitalize">{platform}</p>
+                            <p className="text-sm text-gray-500">
+                                {data?.followers_count?.toLocaleString() || 0} followers
+                            </p>
+                        </div>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-sm font-medium">
+                            {data?.posts_count || 0} posts
+                        </p>
+                        <p className={`text-xs ${
+                            (data?.followers_growth || 0) >= 0 ? 'text-green-600' : 'text-red-600'
+                        }`}>
+                            {data?.followers_growth >= 0 ? '+' : ''}{data?.followers_growth || 0} growth
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+
+        function StatusBadge({ status }) {
+            const statusConfig = {
+                uploaded: { color: 'bg-blue-100 text-blue-800', icon: 'fas fa-upload' },
+                processed: { color: 'bg-green-100 text-green-800', icon: 'fas fa-check' },
+                scheduled: { color: 'bg-yellow-100 text-yellow-800', icon: 'fas fa-clock' },
+                posted: { color: 'bg-green-100 text-green-800', icon: 'fas fa-check-circle' },
+                failed: { color: 'bg-red-100 text-red-800', icon: 'fas fa-exclamation-triangle' }
+            };
+
+            const config = statusConfig[status] || statusConfig.uploaded;
+
+            return (
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.color}`}>
+                    <i className={`${config.icon} mr-1`}></i>
+                    {status}
+                </span>
+            );
+        }
+
+        // Render the app
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
